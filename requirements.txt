@@ -1,0 +1,10 @@
+Flask
+pandas
+numpy
+matplotlib
+cartopy
+shapely
+scipy
+statsmodels
+rpy2
+geopandas

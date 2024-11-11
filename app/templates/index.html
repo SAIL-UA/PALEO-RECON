@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PALEO-RECON</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <h1>PALEO-RECON</h1>
+    <!-- <p class="description"><b>PALEO-RECON</b> is a tool that enables the reconstruction of paleoclimatic data, such as streamflow or precipitation, using observed data and self-calibrated Palmer Drought Severity Index (scPDSI) cells. The platform automates the processes of cell selection, stepwise linear regression (SLR), machine learning and deep learning modeling, and bias correction, making the reconstructions fast, accurate, and reproducible.</p> -->
+    <p class="description"><b>PALEO-RECON</b> is a tool that enables the reconstruction of paleoclimatic data, such as streamflow or precipitation, using observed data and self-calibrated Palmer Drought Severity Index (scPDSI) cells. The platform automates the processes of cell selection, stepwise linear regression (SLR), and bias correction, making the reconstructions fast, accurate, and reproducible.</p>
+    <div class="form-container">
+        <p>Provide Gauge Coordinates and Observed Data to reconstruct a paleoclimate variable.</p>
+        <form id="recon-form" method="post" enctype="multipart/form-data">
+            <label for="coord_format">Coordinate Format:</label>
+            <select id="coord_format" name="coord_format" onchange="toggleCoordInputs()">
+                <option value="decimal">Decimal</option>
+                <option value="dms">DMS</option>
+            </select>
+
+            <div id="decimal-coords">
+                <label for="lat">Latitude (Decimal):</label>
+                <input type="text" id="lat" name="lat" pattern="^-?\d{1,2}\.\d+$" title="Enter a valid decimal latitude" required>
+                
+                <label for="lon">Longitude (Decimal):</label>
+                <input type="text" id="lon" name="lon" pattern="^-?\d{1,3}\.\d+$" title="Enter a valid decimal longitude" required>
+            </div>
+
+            <div id="dms-coords" style="display: none;">
+                <label>Latitude (DMS):</label>
+                    <input class="small-input" type="number" id="lat_deg" name="lat_deg" placeholder="Degrees" min="0" max="90" required>
+                    <input class="small-input" type="number" id="lat_min" name="lat_min" placeholder="Minutes" min="0" max="59" required>
+                    <input class="small-input" type="number" id="lat_sec" name="lat_sec" placeholder="Seconds" min="0" max="59.999" step="0.01" required>
+                    <select class="small-select" id="lat_dir" name="lat_dir">
+                        <option value="N">N</option>
+                        <option value="S">S</option>
+                    </select>
+                
+                <label>Longitude (DMS):</label>
+                    <input class="small-input" type="number" id="lon_deg" name="lon_deg" placeholder="Degrees" min="0" max="180" required>
+                    <input class="small-input" type="number" id="lon_min" name="lon_min" placeholder="Minutes" min="0" max="59" required>
+                    <input class="small-input" type="number" id="lon_sec" name="lon_sec" placeholder="Seconds" min="0" max="59.999" step="0.01" required>
+                    <select class="small-select" id="lon_dir" name="lon_dir">
+                        <option value="E">E</option>
+                        <option value="W">W</option>
+                    </select>
+            </div>
+
+            <label>Auto-detect River Basin:</label>
+            <table>
+                <tr>
+                    <td width="5%">
+                        <checkbox>
+                            <input type="checkbox" id="detect_basin" name="detect_basin">
+                        </checkbox>            
+                    </td>
+                    <td width="95%">
+                        <p>Check to highlight the major river basin if the point is within one.</p>
+                    </td>
+                </tr>
+            </table>
+
+            <label for="radius_km">Search Radius (km):</label>
+            <input type="number" id="radius_km" name="radius_km" required>
+
+            <label for="window_size">Year Window Size for the Stepwise Linear Regression:</label>
+            <select id="window_size" name="window_size">
+                <option value="10">10 years</option>
+                <option value="20">20 years</option>
+                <option value="30">30 years</option>
+                <option value="40">40 years</option>
+                <option value="50" selected>50 years</option>
+                <option value="60">60 years</option>
+            </select>
+
+            <label for="file">Observed Data (CSV):</label>
+            <input type="file" id="file" name="file" accept=".csv" required>
+            <br><br>
+            <button type="submit">Reconstruct</button>
+        </form>
+    </div>
+
+    <div class="results" id="results" style="display: none;">
+        <h2>Results</h2>
+        <img id="result-map" src="" alt="Map">
+        <a id="download-coords" href="">Download Selected Coordinates</a>
+        <a id="download-data" href="">Download Selected Data</a>
+        <a id="download-slr-results" href="">Download Stepwise Linear Regression Results</a>
+        <!-- <a id="download-ml-results" href="">Download Machine Learning Results</a> -->
+        <!-- <a id="download-dl-results" href="">Download Deep Learning Results</a> -->
+    </div>
+
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+</body>
+</html>
