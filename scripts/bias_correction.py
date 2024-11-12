@@ -38,19 +38,14 @@ def bias_correction(work_dir, obs_data_file, rec_data_file, output_file):
             
             # R code embedded in Python using rpy2
             r_code = '''
-                library(qmap)  # Load the qmap library
+                library(qmap)
 
                 # Read the observed and reconstructed data from CSV files
-                obsData = read.csv("{obs_data_file}", sep="{obs_delimiter}", check.names = FALSE)  # Prevent column names from being changed
-                reconstructedData = read.csv("{rec_data_file}", sep=",", check.names = FALSE)  # Prevent column names from being changed
-
-                # Check the column names in the reconstructed data
-                print(names(reconstructedData))
+                obsData = read.csv("{obs_data_file}", sep="{obs_delimiter}", check.names = FALSE) # Prevent column names from being changed
+                reconstructedData = read.csv("{rec_data_file}", sep=",", check.names = FALSE) # Prevent column names from being changed
 
                 # Select the second column of obsData (independent of the name)
-                obs_column_name <- names(obsData)[2]  # The second column in the file
-
-                # Convert the second column to numeric and remove non-numeric values
+                obs_column_name <- names(obsData)[2]
                 obsData[[obs_column_name]] <- as.numeric(obsData[[obs_column_name]])
 
                 # Filter rows that don't have observed values (only keep years with observed data)
@@ -65,19 +60,22 @@ def bias_correction(work_dir, obs_data_file, rec_data_file, output_file):
                 # Iterate over each reconstruction column
                 for (col in reconstructed_columns) {{
 
-                    # Check if there are any values less than or equal to 0 in the reconstructed data
-                    if (any(reconstructedData[[col]] <= 0, na.rm = TRUE)) {{
+                    # Filter the valid years for each reconstruction column
+                    valid_rows = !is.na(reconstructedData[[col]])
+                    temp_reconstructed = reconstructedData[valid_rows, ]
+
+                    if (any(temp_reconstructed[[col]] <= 0, na.rm = TRUE)) {{
                         # If there are values <= 0, leave the column empty
                         bias_corrected_data[[col]] = NA
                     }} else {{
                         # Check if the column has constant values
-                        if (length(unique(reconstructedData[[col]])) == 1) {{
+                        if (length(unique(temp_reconstructed[[col]])) == 1) {{
                             # If the column is constant, copy the same values
-                            bias_corrected_data[[col]] = reconstructedData[[col]]
+                            bias_corrected_data[[col]] = temp_reconstructed[[col]]
                             warning(paste("The column", col, "contains constant values. No bias correction applied."))
                         }} else {{
                             # Filter overlapping years between the observed and reconstructed data
-                            overlapping_years = merge(obsDataCal, reconstructedData[, c("Year", col)], by="Year")
+                            overlapping_years = merge(obsDataCal, temp_reconstructed[, c("Year", col)], by="Year")
                             
                             # Log-transform the observed and reconstructed values for overlapping years
                             y = log10(overlapping_years[[obs_column_name]]) 
@@ -90,7 +88,7 @@ def bias_correction(work_dir, obs_data_file, rec_data_file, output_file):
                                 warning(paste("Insufficient unique values in column", col, "for quantile mapping."))
                             }} else {{
                                 # Take the reconstructed values for all years
-                                all = log10(reconstructedData[[col]])
+                                all = log10(temp_reconstructed[[col]])
                                 
                                 # Fit the quantile mapping model using RQUANT
                                 qm.fit <- fitQmap(obs=y, mod=x, method="RQUANT", wet.day=FALSE)
@@ -102,7 +100,8 @@ def bias_correction(work_dir, obs_data_file, rec_data_file, output_file):
                                 transfBcAll = 10^bcAll
                                 
                                 # Add the bias-corrected results to the corresponding column in the output dataframe
-                                bias_corrected_data[[col]] = transfBcAll
+                                bias_corrected_data[[col]] <- NA
+                                bias_corrected_data[valid_rows, col] <- transfBcAll
                             }}
                         }}
                     }}
@@ -134,5 +133,5 @@ def bias_correction(work_dir, obs_data_file, rec_data_file, output_file):
             merged_df.to_excel(os.path.join(work_dir, output_file.replace('.csv', '.xlsx')), index=False)
 
     finally:
-        # Restore the working directory
+        # Restaurar el directorio de trabajo
         os.chdir(current_dir)
