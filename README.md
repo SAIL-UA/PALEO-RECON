@@ -84,7 +84,7 @@ If you use **PALEO-RECON** in your research, please cite it in either of these t
    *Once the paper is published, please update the citation accordingly.*
 
 2. **To cite the PALEO-RECON software directly**:
-    > Ramírez Molina, A. A. (2024). PALEO-RECON: An Automated Tool for Paleoclimate Reconstructions [Software] (v.1.0.0). Zenodo. DOI: [10.5281/zenodo.14061377](https://doi.org/10.5281/zenodo.14061377)
+    > Ramírez Molina, A. A. (2024). PALEO-RECON: An Automated Tool for Paleoclimate Reconstructions [Software] (v.1.0.1). Zenodo. DOI: [10.5281/zenodo.14089242](https://doi.org/10.5281/zenodo.14089242)
 
 ## License
 
