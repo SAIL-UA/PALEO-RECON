@@ -45,7 +45,9 @@ def validate_observed_data(file_path):
         str: The name of the observed data column.
     """
     try:
-        df = pd.read_csv(file_path, delimiter=';')
+        # Detect delimiter for observed data file
+        observed_delimiter = detect_delimiter(file_path)
+        df = pd.read_csv(file_path, delimiter=observed_delimiter)
         # Check if the DataFrame has two columns
         if len(df.columns) != 2:
             return False, None
