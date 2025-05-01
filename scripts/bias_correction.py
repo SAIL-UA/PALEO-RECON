@@ -41,7 +41,7 @@ def bias_correction(work_dir, obs_data_file, rec_data_file, output_file):
                 library(qmap)
 
                 # Read the observed and reconstructed data from CSV files
-                obsData = read.csv("{obs_data_file}", sep="{obs_delimiter}", check.names = FALSE) # Prevent column names from being changed
+                obsData = read.csv("{obs_data_file}", sep="{obs_delimiter}", check.names = FALSE, fileEncoding = "UTF-8-BOM") # Prevent column names from being changed
                 reconstructedData = read.csv("{rec_data_file}", sep=",", check.names = FALSE) # Prevent column names from being changed
 
                 # Select the second column of obsData (independent of the name)
