@@ -43,6 +43,7 @@ def validate_observed_data(file_path):
     Returns:
         bool: True if the file format is valid, False otherwise.
         str: The name of the observed data column.
+        str: Validation error message if invalid, None otherwise.
     """
     try:
         # Detect delimiter for observed data file
@@ -50,23 +51,30 @@ def validate_observed_data(file_path):
         df = pd.read_csv(file_path, delimiter=observed_delimiter)
         # Check if the DataFrame has two columns
         if len(df.columns) != 2:
-            return False, None
+            return False, None, 'Invalid observed data format. Ensure the file has two columns: Year and observed data.'
         
         # Check if the first column is named 'Year' and contains integer values
         if not df.columns[0].lower() == 'year':
-            return False, None
+            return False, None, 'Invalid observed data format. The first column must be named Year.'
         
         if not pd.api.types.is_integer_dtype(df[df.columns[0]]):
-            return False, None
+            return False, None, 'Invalid observed data format. Years must be integer values.'
+        
+        duplicated_years = df.loc[df[df.columns[0]].duplicated(), df.columns[0]].unique()
+        if len(duplicated_years) > 0:
+            years_preview = ', '.join(map(str, duplicated_years[:10]))
+            if len(duplicated_years) > 10:
+                years_preview += ', ...'
+            return False, None, f'Duplicate years found in observed data: {years_preview}. Each year must appear only once.'
         
         # Check if the second column contains float values
         if not pd.api.types.is_float_dtype(df[df.columns[1]]):
-            return False, None
+            return False, None, 'Invalid observed data format. Observed values must be decimal numbers.'
         
-        return True, df.columns[1]
+        return True, df.columns[1], None
     except Exception as e:
         logger.error(f"Error validating observed data: {str(e)}")
-        return False, None
+        return False, None, 'Invalid observed data format. Ensure the file has two columns: Year and observed data.'
 
 def combine_data(observed_file, selected_file, output_file):
     """
@@ -139,9 +147,9 @@ def index():
                 file.save(observed_data_path)
 
                 # Validate observed data format
-                is_valid, obs_column = validate_observed_data(observed_data_path)
+                is_valid, obs_column, validation_error = validate_observed_data(observed_data_path)
                 if not is_valid:
-                    return jsonify({'error': 'Invalid observed data format. Ensure the file has two columns: Year and observed data.'}), 400
+                    return jsonify({'error': validation_error}), 400
 
                 # Get the correct data files for the determined region
                 coord_file = DATA_FILES[region]['coords']

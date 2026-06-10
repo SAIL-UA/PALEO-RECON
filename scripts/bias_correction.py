@@ -44,6 +44,11 @@ def bias_correction(work_dir, obs_data_file, rec_data_file, output_file):
                 obsData = read.csv("{obs_data_file}", sep="{obs_delimiter}", check.names = FALSE, fileEncoding = "UTF-8-BOM") # Prevent column names from being changed
                 reconstructedData = read.csv("{rec_data_file}", sep=",", check.names = FALSE) # Prevent column names from being changed
 
+                # Normalize the year column name because the Python validator accepts
+                # "year" or "Year", but merge() below requires an exact match.
+                names(obsData)[1] <- "Year"
+                names(reconstructedData)[1] <- "Year"
+
                 # Select the second column of obsData (independent of the name)
                 obs_column_name <- names(obsData)[2]
                 obsData[[obs_column_name]] <- as.numeric(obsData[[obs_column_name]])
@@ -116,6 +121,10 @@ def bias_correction(work_dir, obs_data_file, rec_data_file, output_file):
             obs_df = pd.read_csv(os.path.join(work_dir, obs_data_file), delimiter=obs_delimiter)
             rec_df = pd.read_csv(os.path.join(work_dir, rec_data_file))
             bc_df = pd.read_csv(os.path.join(work_dir, output_file))
+
+            obs_df.rename(columns={obs_df.columns[0]: 'Year'}, inplace=True)
+            rec_df.rename(columns={rec_df.columns[0]: 'Year'}, inplace=True)
+            bc_df.rename(columns={bc_df.columns[0]: 'Year'}, inplace=True)
 
             obs_column_name = obs_df.columns[1]
             obs_df.rename(columns={obs_column_name: 'obsData'}, inplace=True)

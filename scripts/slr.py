@@ -144,20 +144,8 @@ def stepwise_linear_regression(df, id_var, target_var, alpha_enter, alpha_remove
     Perform stepwise linear regression with a recursive sign constraint.
     If a predictor yields a negative coefficient, it is permanently removed 
     from the candidate pool, and the stepwise process restarts.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing the data.
-        id_var (str): Name of the ID variable.
-        target_var (str): Name of the target variable.
-        alpha_enter (float): Significance level for adding predictors.
-        alpha_remove (float): Significance level for removing predictors.
-        predictor_df (pd.DataFrame): DataFrame containing all years with predictors.
-    
-    Returns:
-        pd.DataFrame: DataFrame containing the regression statistics.
-        pd.DataFrame: DataFrame containing the predicted values.
-        pd.DataFrame: DataFrame containing the reconstructed values for all years.
     """
+    
     def run_stepwise(X, y, a_enter, a_remove):
         selected_predictors = []
         remaining_predictors = list(X.columns)
@@ -200,7 +188,7 @@ def stepwise_linear_regression(df, id_var, target_var, alpha_enter, alpha_remove
         final_model = sm.OLS(y, sm.add_constant(X[selected_predictors])).fit()
         return final_model, selected_predictors
 
-    # --- Recursive Logic Starts Here ---
+    # --- New Recursive Logic Starts Here ---
     
     # 1. Define the initial pool of all possible candidates
     current_candidates = list(df.drop(columns=[id_var, target_var]).columns)
@@ -298,6 +286,7 @@ def stepwise_linear_regression(df, id_var, target_var, alpha_enter, alpha_remove
 
     return stats_df, df_output, reconstruction_df
 
+
 def run_stepwise_regression(input_file, predictor_file, window_size, output_directory):
     """
     Run the complete stepwise linear regression process and save the results.
@@ -318,6 +307,7 @@ def run_stepwise_regression(input_file, predictor_file, window_size, output_dire
     predictions_list = []
     reconstructions_list = []
     slr_reconstructions_df = pd.DataFrame({'Year': predictor_df['YEAR']})
+    reconstruction_columns = {}
     for df_window in df_list:
         stats_df, prediction_df, reconstruction_df = stepwise_linear_regression(df_window, 'Year', 'obsData', 0.05, 0.1, predictor_df)
         stats_list.append(stats_df)
@@ -327,10 +317,14 @@ def run_stepwise_regression(input_file, predictor_file, window_size, output_dire
         start_year = df_window['Year'].iloc[0]
         end_year = df_window['Year'].iloc[-1]
         reconstruction_window = f"{start_year}-{end_year}"
-        slr_reconstructions_df[reconstruction_window] = np.nan
-        valid_years = reconstruction_df['Year']
-        mask = slr_reconstructions_df['Year'].isin(valid_years)
-        slr_reconstructions_df.loc[mask, reconstruction_window] = reconstruction_df['reconstructedData'].values
+        reconstruction_series = reconstruction_df.drop_duplicates('Year').set_index('Year')['reconstructedData']
+        reconstruction_columns[reconstruction_window] = slr_reconstructions_df['Year'].map(reconstruction_series)
+
+    if reconstruction_columns:
+        slr_reconstructions_df = pd.concat(
+            [slr_reconstructions_df, pd.DataFrame(reconstruction_columns)],
+            axis=1
+        ).copy()
 
     export_df_list(stats_list, os.path.join(output_directory, 'slr_stats.xlsx'), single_sheet=True, single_sheet_name='stats')
     export_df_list(predictions_list, os.path.join(output_directory, 'slr_predictions.xlsx'))
@@ -346,4 +340,3 @@ def run_stepwise_regression(input_file, predictor_file, window_size, output_dire
         zipObj.write(os.path.join(output_directory, 'slr_predictions.xlsx'), arcname='slr_predictions.xlsx')
         zipObj.write(os.path.join(output_directory, 'slr_reconstructions.xlsx'), arcname='slr_reconstructions.xlsx')
         zipObj.write(os.path.join(output_directory, 'slr_bias_correction.xlsx'), arcname='slr_bias_correction.xlsx')
-
