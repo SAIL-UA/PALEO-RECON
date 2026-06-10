@@ -1,21 +1,32 @@
-import matplotlib
-matplotlib.use('Agg')  # Required to save figures when using SSH
-import matplotlib.ticker as mticker
-import matplotlib.patheffects as PathEffects
 import os
 import shutil
+from functools import lru_cache
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import cartopy.io.shapereader as shpreader
-import geopandas as gpd
-from shapely.geometry import Point, shape
-from shapely.geometry.polygon import Polygon
-from cartopy.geodesic import Geodesic
-from cartopy.mpl.gridliner import LongitudeFormatter, LatitudeFormatter
+
+@lru_cache(maxsize=4)
+def _read_coord_file(coord_file):
+    return pd.read_csv(coord_file)
+
+def read_coord_file(coord_file):
+    return _read_coord_file(os.path.abspath(coord_file))
+
+@lru_cache(maxsize=8)
+def _read_pdsi_file(data_file, selected_ids):
+    selected_columns = {'YEAR'} | {str(cell_id) for cell_id in selected_ids}
+    data_df = pd.read_csv(
+        data_file,
+        usecols=lambda column: column.lstrip('\ufeff') in selected_columns
+    )
+    data_df.rename(columns=lambda column: column.lstrip('\ufeff'), inplace=True)
+    data_df.columns = ['YEAR'] + [int(col) for col in data_df.columns if col != 'YEAR']
+    return data_df
+
+@lru_cache(maxsize=1)
+def _read_mrb_geojson(mrb_geojson):
+    import geopandas as gpd
+
+    return gpd.read_file(mrb_geojson)
 
 def dms_to_decimal(coord_str):
     """
@@ -119,7 +130,13 @@ def select_grid_points(lat, lon, radius_km, coord_df):
     Returns:
         list: List of IDs of the PDSI cells within the search radius.
     """
-    mask = coord_df.apply(lambda row: haversine(lat, lon, row['LATITUDE'], row['LONGITUDE']) <= radius_km, axis=1)
+    distances = haversine(
+        lat,
+        lon,
+        coord_df['LATITUDE'].to_numpy(),
+        coord_df['LONGITUDE'].to_numpy()
+    )
+    mask = distances <= radius_km
     return coord_df[mask]['ID'].tolist()
 
 def generate_output_files(lat, lon, radius_km, coord_file, data_file, detect_basin):
@@ -133,14 +150,14 @@ def generate_output_files(lat, lon, radius_km, coord_file, data_file, detect_bas
         coord_file (str): Path to the CSV file containing PDSI cell coordinates.
         data_file (str): Path to the CSV file containing PDSI cell data.
     """
-    coord_df = pd.read_csv(coord_file)
-    data_df = pd.read_csv(data_file)
+    coord_file = os.path.abspath(coord_file)
+    data_file = os.path.abspath(data_file)
+    coord_df = read_coord_file(coord_file)
     
     # Filter coordinates within the search radius
     selected_ids = select_grid_points(lat, lon, radius_km, coord_df)
 
-    # Convert all column names to integers except the 'YEAR' column
-    data_df.columns = ['YEAR'] + [int(col) for col in data_df.columns if col != 'YEAR']
+    data_df = _read_pdsi_file(data_file, tuple(sorted(selected_ids)))
 
     selected_coords = coord_df[coord_df['ID'].isin(selected_ids)]
     cols_to_keep = ['YEAR'] + [col for col in data_df.columns if col in selected_ids]
@@ -162,7 +179,7 @@ def generate_output_files(lat, lon, radius_km, coord_file, data_file, detect_bas
     selected_coords.to_csv(output_coord_file, index=False)
     selected_data.to_csv(output_data_file, index=False)
 
-    mrb_geojson = os.path.join('data', 'mrb_basins.json')
+    mrb_geojson = os.path.abspath(os.path.join('data', 'mrb_basins.json'))
         
     #plot_map(lat, lon, radius_km, coord_df, selected_ids, map_file, projection='PlateCarree', centered=True, outside_points=False)
     plot_map(lat, lon, radius_km, coord_df, selected_ids, map_file, mrb_geojson, detect_basin=detect_basin, projection='PlateCarree', centered=True, outside_points=False)
@@ -184,14 +201,26 @@ def plot_map(lat, lon, radius_km, coord_df, selected_ids, map_file, mrb_geojson,
         outside_points (bool): Whether to plot the points outside the selected area.
         visibility_threshold (float): Minimum visible area required to display a country's name.
     """
-    
-    # Load MRB polygons from GeoJSON
-    mrb_gdf = gpd.read_file(mrb_geojson)
-    
-    # Create point from lat, lon
-    point = Point(lon, lat)
+    import matplotlib
+    matplotlib.use('Agg')  # Required to save figures when using SSH
+    import matplotlib.ticker as mticker
+    import matplotlib.patheffects as PathEffects
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    import cartopy.io.shapereader as shpreader
+    import geopandas as gpd
+    from shapely.geometry import Point
+    from shapely.geometry.polygon import Polygon
+    from cartopy.geodesic import Geodesic
+    from cartopy.mpl.gridliner import LongitudeFormatter, LatitudeFormatter
     
     if detect_basin:
+        # Load MRB polygons only when basin highlighting is requested.
+        mrb_gdf = _read_mrb_geojson(os.path.abspath(mrb_geojson))
+        point = Point(lon, lat)
+
         # Initialize variables for the MRB name and polygon
         mrb_name = None
         mrb_polygon = None

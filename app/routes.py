@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, url_for
 import os
 import pandas as pd
-from scripts import create_output_directory, generate_output_files, dms_to_decimal, detect_delimiter, run_stepwise_regression, bias_correction
+from scripts import create_output_directory, generate_output_files, dms_to_decimal, detect_delimiter, read_coord_file, run_stepwise_regression, bias_correction
 import logging
 
 main = Blueprint('main', __name__)
@@ -153,7 +153,7 @@ def index():
 
                 # Get the correct data files for the determined region
                 coord_file = DATA_FILES[region]['coords']
-                coord_df = pd.read_csv(coord_file)
+                coord_df = read_coord_file(coord_file)
                 if len(coord_df) == 0:
                     return jsonify({'error': 'No PDSI Cells found for the selected search radius.'}), 400
                 data_file = DATA_FILES[region]['data']

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from scipy import stats
 from scipy.stats import pearsonr
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -7,6 +8,32 @@ from statsmodels.stats.stattools import durbin_watson
 import os
 import zipfile as zf
 from .bias_correction import bias_correction
+
+def _correlations_and_pvalues(obs, predictors):
+    obs = np.asarray(obs, dtype=float)
+    predictors = np.asarray(predictors, dtype=float)
+    n = len(obs)
+
+    if predictors.shape[1] == 0:
+        return np.array([]), np.array([])
+
+    obs_centered = obs - obs.mean()
+    predictors_centered = predictors - predictors.mean(axis=0)
+    obs_norm = np.linalg.norm(obs_centered)
+    predictor_norms = np.linalg.norm(predictors_centered, axis=0)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        correlations = obs_centered.dot(predictors_centered) / (obs_norm * predictor_norms)
+
+    correlations = np.clip(correlations, -1.0, 1.0)
+
+    if n == 2:
+        p_values = np.ones_like(correlations, dtype=float)
+    else:
+        distribution = stats.beta(n / 2 - 1, n / 2 - 1, loc=-1, scale=2)
+        p_values = 2 * distribution.sf(np.abs(correlations))
+
+    return correlations, p_values
 
 def correlated_vectors(df, p_value_threshold=0.01):
     """
@@ -20,14 +47,17 @@ def correlated_vectors(df, p_value_threshold=0.01):
     Returns:
         pd.DataFrame: DataFrame containing only the significant columns.
     """
-    significant_vectors = ["Year", "obsData"]
-    
-    # Calculate the correlation between the observed data and each column
-    for column in df.columns[2:]:
-        correlation, p_value = pearsonr(df["obsData"], df[column])
-        # Select vector if the correlation is positive and the p-value is below the threshold
-        if correlation > 0 and p_value <= p_value_threshold:
-            significant_vectors.append(column)
+    predictor_columns = list(df.columns[2:])
+    correlations, p_values = _correlations_and_pvalues(
+        df["obsData"].to_numpy(),
+        df[predictor_columns].to_numpy()
+    )
+    significant_predictors = [
+        column
+        for column, correlation, p_value in zip(predictor_columns, correlations, p_values)
+        if correlation > 0 and p_value <= p_value_threshold
+    ]
+    significant_vectors = ["Year", "obsData"] + significant_predictors
     
     return df[significant_vectors]
 
@@ -43,24 +73,30 @@ def stability_filter(df):
     """
     # Determine the window size based on the length of the DataFrame
     window_size = len(df) // 3
-    correlations_list = []
+    predictor_columns = list(df.columns[2:])
+    if not predictor_columns:
+        return df
     
     # Calculate the correlation between the observed data and each column over a rolling window
+    unstable_columns = set()
     for start in range(0, len(df) - window_size + 1):
         end = start + window_size
         window_data = df.iloc[start:end]
-        correlations = {}
-        for column in df.columns[2:]:
-            correlation, _ = pearsonr(window_data["obsData"], window_data[column])
-            correlations[column] = correlation
-        correlations_list.append(correlations)
-    
-    df_correlations = pd.DataFrame(correlations_list)
-    
-    # Remove columns with negative correlations
-    for column in df_correlations.columns:
-        if (df_correlations[column] < 0).any():
-            df = df.drop(column, axis=1)
+        correlations, _ = _correlations_and_pvalues(
+            window_data["obsData"].to_numpy(),
+            window_data[predictor_columns].to_numpy()
+        )
+        unstable_columns.update(
+            column
+            for column, correlation in zip(predictor_columns, correlations)
+            if correlation < 0
+        )
+
+        if len(unstable_columns) == len(predictor_columns):
+            break
+
+    if unstable_columns:
+        df = df.drop(columns=list(unstable_columns))
     
     return df
 
@@ -234,21 +270,15 @@ def stepwise_linear_regression(df, id_var, target_var, alpha_enter, alpha_remove
 
     def calculate_r2_pred(df_copy, predictors, target):
         if not predictors: return 0
-        preds = []
-        actuals = []
-        for i in df_copy.index:
-            df_train = df_copy.drop(index=i)
-            df_test = df_copy.loc[[i]]
-            m_cv = sm.OLS(df_train[target], sm.add_constant(df_train[predictors])).fit()
-            const_test = sm.add_constant(df_test[predictors], has_constant='add')
-            # Align columns in case of missing variables in test slice
-            const_test = const_test.reindex(columns=m_cv.params.index, fill_value=1)
-            prediction = m_cv.predict(const_test)
-            preds.append(prediction.iloc[0])
-            actuals.append(df_test[target].iloc[0])
-        
-        ss_res = sum((np.array(actuals) - np.array(preds)) ** 2)
-        ss_tot = sum((np.array(actuals) - np.mean(actuals)) ** 2)
+        actuals = df_copy[target].to_numpy()
+        residuals = model.resid.to_numpy()
+        leverage = model.get_influence().hat_matrix_diag
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            loo_errors = residuals / (1 - leverage)
+
+        ss_res = np.sum(loo_errors ** 2)
+        ss_tot = np.sum((actuals - np.mean(actuals)) ** 2)
         return 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
 
     r2_pred = calculate_r2_pred(df, selected_predictors, target_var)
